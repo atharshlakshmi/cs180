@@ -1,0 +1,589 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CS 180 — Proj 1 — Atharshlakshmi</title>
+<meta name="description" content="CS 180: Intro to Computer Vision and Computational Photography — Project 1, Images of the Russian Empire: Colorizing the Prokudin-Gorskii Photo Collection.">
+<meta name="author" content="Atharshlakshmi Vijayakumar">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⭐️</text></svg>">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="stylesheet" href="../docs/styles.css">
+<script>
+  MathJax = {
+    tex: {
+      inlineMath: [['\\(', '\\)']],
+      displayMath: [['\\[', '\\]']]
+    }
+  };
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-mml-chtml.js"></script>
+</head>
+<body>
+
+<header style="position:sticky;top:0;width:100%;background:var(--header-bg);backdrop-filter:blur(6px);border-bottom:1px solid var(--border);z-index:50">
+  <div style="max-width:1040px;margin:0 auto;padding:0 20px;display:flex;justify-content:center;align-items:center;height:44px;position:relative">
+    <nav style="display:flex;gap:20px;font-size:14px">
+      <a href="../index.html" class="nav-link">CS 180</a>
+      <a href="#part1" class="nav-link">Part 1</a>
+      <a href="#part2" class="nav-link">Part 2</a>
+      <a href="#part3" class="nav-link">Part 3</a>
+      <a href="#bw" class="nav-link">B&amp;W</a>
+    </nav>
+    <button id="theme-toggle" class="theme-toggle" aria-label="Toggle dark mode" onclick="toggleTheme()"><i class="fas fa-moon"></i></button>
+  </div>
+</header>
+
+<div class="page-layout">
+
+  <!-- =========================================================
+       STICKY SIDEBAR TOC
+       ========================================================= -->
+  <aside class="page-toc">
+    <p class="toc-section">Part 1 — Single-Scale</p>
+    <ul>
+      <li><a href="#p1-task">The task</a></li>
+      <li><a href="#p1-metric">Similarity metric</a></li>
+      <li><a href="#p1-window">Search window</a></li>
+      <li><a href="#p1-algo">Algorithm</a></li>
+      <li><a href="#p1-discussion">Discussion</a></li>
+    </ul>
+    <p class="toc-section">Part 2 — Pyramid</p>
+    <ul>
+      <li><a href="#p2-why">Why brute force fails</a></li>
+      <li><a href="#p2-how">How the pyramid works</a></li>
+      <li><a href="#p2-window">Search window</a></li>
+      <li><a href="#p2-metric">Metric</a></li>
+      <li><a href="#p2-results">Results</a></li>
+      <li><a href="#p2-fail">Failure — Emir</a></li>
+    </ul>
+    <p class="toc-section">Part 3 — My Images</p>
+    <ul>
+      <li><a href="#p3-selections">Selections</a></li>
+    </ul>
+    <p class="toc-section">Bells &amp; Whistles</p>
+    <ul>
+      <li><a href="#bw-gradient">Gradient alignment</a></li>
+    </ul>
+  </aside>
+
+  <main class="page-main">
+
+    <div class="section-header" style="margin-bottom:36px">
+      <p class="eyebrow">CS 180 — Project 1</p>
+      <h1 style="font-size:22px;font-weight:600;margin-bottom:8px">Images of the Russian Empire: Colorizing the Prokudin-Gorskii Photo Collection</h1>
+      <p style="font-size:14px;color:var(--text-2)">Atharshlakshmi Vijayakumar</p>
+    </div>
+
+    <!-- =========================================================
+         PART 1 — SINGLE-SCALE ALIGNMENT
+         ========================================================= -->
+    <section id="part1" style="margin-bottom:48px;scroll-margin-top:80px">
+      <div class="section-header">
+        <p class="eyebrow">Part 1 — Single-Scale Alignment</p>
+        <p class="section-sub">Brute-force NCC alignment on the small JPEG plates</p>
+      </div>
+
+      <div class="shot-row">
+        <div class="shot">
+          <img src="out_path/part1/cathedral_out.jpg" alt="cathedral aligned">
+          <div class="shot-caption"><strong>Cathedral</strong></div>
+          <div class="stat-row">
+            <span class="stat-chip">G: <b>(2, 5)</b></span>
+            <span class="stat-chip">R: <b>(3, 12)</b></span>
+          </div>
+        </div>
+        <div class="shot">
+          <img src="out_path/part1/monastery_out.jpg" alt="monastery aligned">
+          <div class="shot-caption"><strong>Monastery</strong></div>
+          <div class="stat-row">
+            <span class="stat-chip">G: <b>(2, -3)</b></span>
+            <span class="stat-chip">R: <b>(2, 3)</b></span>
+          </div>
+        </div>
+        <div class="shot">
+          <img src="out_path/part1/tobolsk_out.jpg" alt="tobolsk aligned">
+          <div class="shot-caption"><strong>Tobolsk</strong></div>
+          <div class="stat-row">
+            <span class="stat-chip">G: <b>(3, 3)</b></span>
+            <span class="stat-chip">R: <b>(3, 6)</b></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><p class="entry-title" id="p1-task">The task</p></div>
+        <div class="reflection">
+          <p>Each Prokudin-Gorskii plate is a single grayscale image stacked as three vertically-tiled exposures with blue on top, green in the middle, red on the bottom. I split the image into thirds by height, then align the green and red channels to the blue channel. My process is explained the sections below.</p><br>
+          <p>Throughout this writeup, <code>dx</code> and <code>dy</code> refer to that displacement: <code>dx</code> is the horizontal shift (columns) and <code>dy</code> is the vertical shift (rows) applied to a channel to bring it into alignment with blue.</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><p class="entry-title" id="p1-metric">Similarity metric</p></div>
+        <div class="reflection">
+          <p>I used normalized cross-correlation (NCC). For two image patches a and b, I mean-center each (subtract its own average brightness), then compute:</p>
+        </div>
+
+        <div class="formula-box">
+          \[ \text{NCC}(a, b) = \frac{a \cdot b}{\|a\|\,\|b\|} \]
+        </div>
+
+        <div class="reflection">
+          <p>This is the dot product of the two mean-centered images, normalized by the product of their L2 norms. It's invariant to overall brightness differences between channels. A score of 1 means a perfect match and -1 means perfectly anti-correlated. Higher NCC always means a better-aligned channel.</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><p class="entry-title" id="p1-window">Search window</p></div>
+
+        <div class="stat-row">
+          <span class="stat-chip">window = <b>15 px</b></span>
+          <span class="stat-chip">border crop = <b>10%</b></span>
+        </div>
+
+        <div class="reflection">
+          <p>I used a search window of 15 pixels in each direction (so a 31×31 grid of candidate shifts), with a 10% border crop applied before scoring so the black plate edges don't corrupt the NCC signal. NCC is computed only on the interior region where two channels should actually agree. The full, untrimmed channel is still what gets shifted and saved. </p>
+          </p>I picked 15 by sweeping window sizes {5, 10, 15, 20} on cathedral.jpg:</p>
+          <ul>
+            <li>At window=5 and window=10, the red channel's shift kept hitting the edge of the search window, which is a sign the window was too small to contain the true offset.</li>
+            <li>At window=15, both G and R settled on a stable answer — (2, 5) and (3, 12) respectively which did not change when I went up to window=20. This meant that window=15 is suitable.</li>
+          </ul>
+        </div>
+
+        <div class="shot-row">
+          <div class="shot">
+            <img src="exploration_data/pt1_sweep.png" alt="parameter sweep">
+            <div class="shot-caption"><strong>Parameter sweep on border and window values</strong></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><p class="entry-title" id="p1-algo">Algorithm walkthrough</p></div>
+        <div class="reflection">
+          <p>For each candidate shift (dx, dy) in the search window:</p>
+          <ol>
+            <li>Shift the moving channel by (dx, dy) using <code>np.roll</code>.</li>
+            <li>Crop both the shifted channel and the reference (blue) channel to the same interior region (trimming the border).</li>
+            <li>Score the cropped pair with NCC.</li>
+            <li>Keep the (dx, dy) with the highest score.</li>
+          </ol>
+          <p>Once the best shift is found, I apply it to the full, uncropped channel, then stack the three channels into an RGB image and clip to [0, 1].</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><p class="entry-title" id="p1-postprocess">Post-processing: display crop</p></div>
+        <div class="reflection">
+          <p>Shifting channels by (dx, dy) wraps pixels around the edges (a side effect of using <code>np.roll</code>), so the aligned output has a thin strip of misaligned pixels around its border. Before saving the final image, I apply a small fixed crop 7% on each side purely for display.</p>
+        </div>
+        <div class="shot-row">
+          <div class="shot">
+            <img src="exploration_data/pt1_fixed_crop.png" alt="fixed display crop example">
+            <div class="shot-caption"><strong>Before vs. after the fixed display crop</strong></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><p class="entry-title" id="p1-discussion">Discussion</p></div>
+        <div class="reflection">
+          <p>All three test images aligned cleanly with a single 31×31 brute-force search with all comfortably inside the 15-pixel window. Runtime was near-instant for all three since the JPEGs are small.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- =========================================================
+         PART 2 — MULTI-SCALE PYRAMID ALIGNMENT
+         ========================================================= -->
+    <section id="part2" style="margin-bottom:48px;scroll-margin-top:80px">
+      <div class="section-header">
+        <p class="eyebrow">Part 2 — Multi-Scale Pyramid Alignment</p>
+        <p class="section-sub">Extending single-scale alignment to full-resolution TIFFs via an image pyramid</p>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><p class="entry-title" id="p2-why">Why single-scale brute force isn't enough</p></div>
+        <div class="reflection">
+          <p>The full-resolution <code>.tif</code> plates are much larger than the JPEGs in Part 1, and their true channel offsets are correspondingly larger — some ended up over 100 pixels in a single axis. Brute-force search cost grows with both the window size and the number of pixels scored, so a 15-pixel window that ran instantly on a small JPEG takes far too long on a multi-megapixel TIFF, and a window wide enough to actually reach a 100+ pixel true offset would be even slower still.</p>
+        </div>
+        <div class="callout">
+          <p class="callout-title"><i class="fas fa-triangle-exclamation"></i> The core problem</p>
+          <p>Single-scale search can't cover the right range of offsets in reasonable time at full resolution. It's a speed/range trade-off that brute force alone can't win.</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><p class="entry-title" id="p2-how">How the pyramid works</p></div>
+        <div class="reflection">
+          <p><code>pyramid_align</code> is recursive:</p>
+          <ol>
+            <li>If the current image is already small (<code>min(h, w) &lt; min_size</code>, using <code>min_size = 100</code>), run the Part 1 brute-force <code>align()</code> directly.</li>
+            <li>Otherwise, downsample both the moving channel and the reference by a factor of 2 (<code>img[::2, ::2]</code>) and recurse on the smaller pair first.</li>
+            <li>Double the shift returned from that coarser level to bring it to the current level's pixel scale, apply it, then run a small brute-force refinement search to correct for rounding error from downsampling.</li>
+            <li>Sum the coarse and refine shifts and repeat going back up the pyramid until full resolution.</li>
+          </ol>
+          <p>Each level only has to search a small local window because the level below already got the shift roughly right.</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><p class="entry-title" id="p2-window">Search window per level</p></div>
+        <div class="stat-row">
+          <span class="stat-chip">coarse (base case) = <b>15 px</b></span>
+          <span class="stat-chip">refine (every other level) = <b>4 px</b></span>
+        </div>
+        <div class="reflection">
+          <p>At the coarsest (base-case) level: the same 15-pixel brute-force window as Part 1 — but since this level is heavily downsampled, 15 pixels there corresponds to a much larger displacement once scaled back up to full resolution. At every level above the base case, a small 4-pixel refinement window, since the shift estimate coming from the level below has already been scaled up and should be close to correct.</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><p class="entry-title" id="p2-metric">Metric</p></div>
+        <div class="reflection">
+          <p>Same NCC function from Part 1. Scoring is still done on a 10%-border-cropped region at whichever resolution the current level is working at, so plate edge artifacts don't affect the metric.</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <p class="entry-title" id="p2-results">Results — all provided images</p>
+          <p class="entry-sub">14 images, pyramid alignment with fixed-crop display</p>
+        </div>
+        <div class="shot-row">
+          <div class="shot">
+            <img src="out_path/part2/cathedral_out.jpg">
+            <div class="shot-caption"><strong>cathedral.jpg</strong></div>
+            <div class="stat-row">
+              <span class="stat-chip">G: <b>(2, 5)</b></span>
+              <span class="stat-chip">R: <b>(3, 12)</b></span>
+              <span class="stat-chip chip-time">0.21 s</span>
+            </div>
+          </div>
+          <div class="shot">
+            <img src="out_path/part2/church_out.jpg">
+            <div class="shot-caption"><strong>church.tif</strong></div>
+            <div class="stat-row">
+              <span class="stat-chip">G: <b>(4, 25)</b></span>
+              <span class="stat-chip">R: <b>(-4, 58)</b></span>
+              <span class="stat-chip chip-time">15.09 s</span>
+            </div>
+          </div>
+          <div class="shot">
+            <img src="out_path/part2/emir_out.jpg">
+            <div class="shot-caption"><strong>emir.tif</strong></div>
+            <div class="stat-row">
+              <span class="stat-chip">G: <b>(24, 49)</b></span>
+              <span class="stat-chip chip-fail">R: <b>(-778, 104)</b></span>
+              <span class="stat-chip chip-time">16.24 s</span>
+            </div>
+          </div>
+          <div class="shot">
+            <img src="out_path/part2/harvesters_out.jpg">
+            <div class="shot-caption"><strong>harvesters.tif</strong></div>
+            <div class="stat-row">
+              <span class="stat-chip">G: <b>(17, 60)</b></span>
+              <span class="stat-chip">R: <b>(13, 124)</b></span>
+              <span class="stat-chip chip-time">16.17 s</span>
+            </div>
+          </div>
+          <div class="shot">
+            <img src="out_path/part2/icon_out.jpg">
+            <div class="shot-caption"><strong>icon.tif</strong></div>
+            <div class="stat-row">
+              <span class="stat-chip">G: <b>(17, 41)</b></span>
+              <span class="stat-chip">R: <b>(23, 89)</b></span>
+              <span class="stat-chip chip-time">16.75 s</span>
+            </div>
+          </div>
+          <div class="shot">
+            <img src="out_path/part2/ilemselga_out.jpg">
+            <div class="shot-caption"><strong>ilemselga.tif</strong></div>
+            <div class="stat-row">
+              <span class="stat-chip">G: <b>(7, 40)</b></span>
+              <span class="stat-chip">R: <b>(11, 130)</b></span>
+              <span class="stat-chip chip-time">16.88 s</span>
+            </div>
+          </div>
+          <div class="shot">
+            <img src="out_path/part2/melons_out.jpg">
+            <div class="shot-caption"><strong>melons.tif</strong></div>
+            <div class="stat-row">
+              <span class="stat-chip">G: <b>(11, 82)</b></span>
+              <span class="stat-chip">R: <b>(13, 178)</b></span>
+              <span class="stat-chip chip-time">16.55 s</span>
+            </div>
+          </div>
+          <div class="shot">
+            <img src="out_path/part2/monastery_out.jpg">
+            <div class="shot-caption"><strong>monastery.jpg</strong></div>
+            <div class="stat-row">
+              <span class="stat-chip">G: <b>(2, -3)</b></span>
+              <span class="stat-chip">R: <b>(2, 3)</b></span>
+              <span class="stat-chip chip-time">0.25 s</span>
+            </div>
+          </div>
+          <div class="shot">
+            <img src="out_path/part2/religous_painting_out.jpg">
+            <div class="shot-caption"><strong>religous_painting.tif</strong></div>
+            <div class="stat-row">
+              <span class="stat-chip">G: <b>(3, 28)</b></span>
+              <span class="stat-chip">R: <b>(7, 68)</b></span>
+              <span class="stat-chip chip-time">16.14 s</span>
+            </div>
+          </div>
+          <div class="shot">
+            <img src="out_path/part2/self_portrait_out.jpg">
+            <div class="shot-caption"><strong>self_portrait.tif</strong></div>
+            <div class="stat-row">
+              <span class="stat-chip">G: <b>(29, 79)</b></span>
+              <span class="stat-chip">R: <b>(37, 176)</b></span>
+              <span class="stat-chip chip-time">16.84 s</span>
+            </div>
+          </div>
+          <div class="shot">
+            <img src="out_path/part2/siren_out.jpg">
+            <div class="shot-caption"><strong>siren.tif</strong></div>
+            <div class="stat-row">
+              <span class="stat-chip">G: <b>(-6, 49)</b></span>
+              <span class="stat-chip">R: <b>(-25, 96)</b></span>
+              <span class="stat-chip chip-time">16.72 s</span>
+            </div>
+          </div>
+          <div class="shot">
+            <img src="out_path/part2/three_generations_out.jpg">
+            <div class="shot-caption"><strong>three_generations.tif</strong></div>
+            <div class="stat-row">
+              <span class="stat-chip">G: <b>(14, 53)</b></span>
+              <span class="stat-chip">R: <b>(11, 112)</b></span>
+              <span class="stat-chip chip-time">16.29 s</span>
+            </div>
+          </div>
+          <div class="shot">
+            <img src="out_path/part2/tobolsk_out.jpg">
+            <div class="shot-caption"><strong>tobolsk.jpg</strong></div>
+            <div class="stat-row">
+              <span class="stat-chip">G: <b>(3, 3)</b></span>
+              <span class="stat-chip">R: <b>(3, 6)</b></span>
+              <span class="stat-chip chip-time">0.28 s</span>
+            </div>
+          </div>
+          <div class="shot">
+            <img src="out_path/part2/wharf_out.jpg">
+            <div class="shot-caption"><strong>wharf.tif</strong></div>
+            <div class="stat-row">
+              <span class="stat-chip">G: <b>(-7, 15)</b></span>
+              <span class="stat-chip">R: <b>(-16, 83)</b></span>
+              <span class="stat-chip chip-time">16.61 s</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="reflection">
+          <p class="reflection-label">Discussion</p>
+          <p>Across the 13 successfully-aligned images, runtime is consistent at roughly 14–16 seconds per full-resolution TIFF (under the 1 minute/image target), with the two small JPEGs finishing in under a third of a second. Offset magnitudes vary a lot by image as some (church, tobolsk) need only a few pixels of correction, while others (self_portrait, melons) need 100+ pixels. For every image except emir.tif, the G and R shifts move in a consistent direction relative to each other, which is a sign that the pyramid converged correctly.</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><p class="entry-title" id="p2-fail">Failure case — Emir of Bukhara</p></div>
+
+        <div class="shot-row">
+          <div class="shot">
+            <img src="out_path/part2/emir_out.jpg">
+            <div class="shot-caption"><strong>Failed alignment</strong></div>
+          </div>
+        </div>
+
+        <div class="stat-row">
+          <span class="stat-chip">G: <b>(24, 49)</b></span>
+          <span class="stat-chip chip-fail">R: <b>(-778, 104)</b></span>
+        </div>
+
+        <div class="reflection">
+          <p class="reflection-label">Why plain pyramid alignment fails</p>
+          <p>Raw-pixel NCC gives an R shift wildly inconsistent with G, and completely out of line with every other image in the set. This plate's three exposures likely differ substantially in brightness/contrast from one another. Raw-pixel NCC is sensitive to exactly that kind of global intensity difference, so at the coarsest pyramid level — where there's little detail to distinguish real structure from lighting differences — the search converges on the wrong local optimum. Because each level only refines the shift handed down from the level below with a small 4-pixel window, a wrong answer at the coarsest level can never be corrected later; the error is locked in from the start.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- =========================================================
+         PART 3 — OWN IMAGES
+         ========================================================= -->
+    <section id="part3" style="margin-bottom:48px;scroll-margin-top:80px">
+      <div class="section-header">
+        <p class="eyebrow">Part 3 — My Own Images</p>
+        <p class="section-sub">Three additional plates from the Library of Congress Prokudin-Gorskii collection</p>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><p class="entry-title" id="p3-selections">Selections from the Library of Congress collection</p></div>
+
+        <div class="card-header">
+          <p class="entry-title" style="font-size:14px">1st Picture</p>
+        </div>
+        <div class="shot-row">
+          <div class="shot shot-original">
+            <img src="chosen_pictures/example1.jpg" alt="choice1 original">
+            <div class="shot-caption"><strong>Original</strong></div>
+          </div>
+          <div class="shot">
+            <img src="out_path/part3/example1_out.jpg" alt="choice1 aligned">
+            <div class="shot-caption"><strong>Aligned</strong></div>
+            <div class="stat-row">
+              <span class="stat-chip">G: <b>(31, 38)</b></span>
+              <span class="stat-chip">R: <b>(-165, 293)</b></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="card-header">
+          <p class="entry-title" style="font-size:14px">2nd Picture</p>
+        </div>
+        <div class="shot-row">
+          <div class="shot shot-original">
+            <img src="chosen_pictures/example2.jpg" alt="choice2 original">
+            <div class="shot-caption"><strong>Original</strong></div>
+          </div>
+          <div class="shot">
+            <img src="out_path/part3/example2_out.jpg" alt="choice2 aligned">
+            <div class="shot-caption"><strong>Aligned</strong></div>
+            <div class="stat-row">
+              <span class="stat-chip">G: <b>(-19, -10)</b></span>
+              <span class="stat-chip">R: <b>(-55, -4)</b></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="card-header">
+          <p class="entry-title" style="font-size:14px">3rd Picture</p>
+        </div>
+        <div class="shot-row">
+          <div class="shot shot-original">
+            <img src="chosen_pictures/example3.jpg" alt="choice3 original">
+            <div class="shot-caption"><strong>Original</strong></div>
+          </div>
+          <div class="shot">
+            <img src="out_path/part3/example3_out.jpg" alt="choice3 aligned">
+            <div class="shot-caption"><strong>Aligned</strong></div>
+            <div class="stat-row">
+              <span class="stat-chip">G: <b>(-9, 48)</b></span>
+              <span class="stat-chip">R: <b>(-15, 111)</b></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="reflection">
+          <p class="reflection-label">Discussion</p>
+          <p>I picked a mix of architectural shots and images with a lot of detail, since misalignment shows up fastest as visible edges or fringing along straight lines and textured regions. A slightly-off shift is much easier to spot on a building facade or a detailed scene than on something flat or low-contrast. The results were satisfactory. </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- =========================================================
+         BELLS & WHISTLES
+         ========================================================= -->
+    <section id="bw" style="margin-bottom:48px;scroll-margin-top:80px">
+      
+
+      <div class="section-header">
+        <p class="eyebrow">Bells &amp; Whistles</p>
+        <p class="section-sub">Extensions beyond the core alignment pipeline</p>
+      </div>
+      
+      <div class="card">
+        <div class="card-header">
+          <p class="entry-title" id="bw-gradient">Gradient/Edge-Based Alignment</p>
+          <div class="badge-row"><span class="badge"><i class="fas fa-star"></i> Bells &amp; Whistles</span></div>
+        </div>
+
+        <div class="shot-row">
+          <div class="shot">
+            <img src="out_path/part2/emir_out.jpg" alt="emir misaligned">
+            <div class="shot-caption"><strong>Raw-pixel alignment</strong></div>
+            <div class="stat-row">
+              <span class="stat-chip">G: <b>(24, 49)</b></span>
+              <span class="stat-chip chip-fail">R: <b>(-778, 104)</b></span>
+            </div>
+          </div>
+          <div class="shot">
+            <img src="out_path/bw/emir_out.jpg" alt="emir aligned">
+            <div class="shot-caption"><strong>Gradient-based alignment</strong></div>
+            <div class="stat-row">
+              <span class="stat-chip">G: <b>(24, 49)</b></span>
+              <span class="stat-chip chip-fix">R: <b>(40, 107)</b></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="reflection">
+          <p class="reflection-label">Motivation &amp; approach</p>
+          <p>The plain pyramid alignment from Part 2 failed on emir.tif, producing an R shift of (-778, 104) that's wildly inconsistent with its own G shift of (24, 49). The likely cause is that this plate's three exposures differ substantially in brightness from one another, and raw-pixel NCC is sensitive to that kind of global intensity difference. At the coarsest pyramid level, where there's little detail to go on, the search locks onto lighting differences instead of actual structure, and that wrong answer can't be recovered by the small refinement windows at finer levels.</p>
+          <p>My fix was to align on gradient magnitude images instead of raw pixels. For each channel, I run a Sobel filter in both x and y (<code>skimage.filters.sobel</code>) and combine them as:</p>
+        </div>
+
+        <div class="formula-box">
+          \( G = \sqrt{G_x^2 + G_y^2} \)
+          <p class="formula-caption">gradient magnitude — edge strength at each pixel</p>
+        </div>
+
+        <div class="reflection">
+          <p>Edge maps emphasize where the image changes rather than its absolute brightness, so they're far less sensitive to exposure differences between channels. I run the <code>pyramid_align</code> function from Part 2 on these gradient images to find the shift, then apply that shift to the original color channels to build the final output. The gradient images are only used to compute the offset.</p>
+        </div>
+
+        <div class="reflection">
+          <p class="reflection-label">Results</p>
+          <p>Switching to gradient-based alignment gives R shift = (40, 107), now consistent in direction and magnitude with the G shift of (24, 49), and in line with the range of offsets seen across the rest of the dataset. The comparison above shows the difference directly: the raw-pixel result has severe red ghosting while the gradient-based result produces a properly aligned color image. Total runtime was 17.4s.</p>
+        </div>
+      </div>      
+    </section>
+
+  </main>
+</div>
+
+<footer style="border-top:1px solid var(--border);padding:20px;text-align:center;font-size:14px;color:var(--text-3)">
+  © 2026 Atharshlakshmi Vijayakumar.
+</footer>
+
+<script>
+(function(){
+  const root = document.documentElement;
+  const saved = localStorage.getItem('theme');
+  if(saved){ root.setAttribute('data-theme', saved); }
+  window.toggleTheme = function(){
+    const systemDark = window.matchMedia('(prefers-color-scheme:dark)').matches;
+    const current = root.getAttribute('data-theme') || (systemDark ? 'dark' : 'light');
+    const next = current === 'dark' ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    localStorage.setItem('theme', next);
+    updateIcon(next);
+  };
+  function updateIcon(theme){
+    const isDark = theme === 'dark' || (theme == null && window.matchMedia('(prefers-color-scheme:dark)').matches);
+    const icon = document.querySelector('#theme-toggle i');
+    if(icon){ icon.className = isDark ? 'fas fa-sun' : 'fas fa-moon'; }
+  }
+  updateIcon(root.getAttribute('data-theme'));
+})();
+
+// Highlight active TOC link on scroll
+(function(){
+  const links = document.querySelectorAll('.page-toc a[href^="#"]');
+  if(!links.length) return;
+  const targets = Array.from(links).map(a => document.getElementById(a.getAttribute('href').slice(1))).filter(Boolean);
+  function onScroll(){
+    let activeId = null;
+    for(const el of targets){
+      const rect = el.getBoundingClientRect();
+      if(rect.top < 120){ activeId = el.id; } else break;
+    }
+    links.forEach(a => a.classList.toggle('active', a.getAttribute('href') === '#' + activeId));
+  }
+  document.addEventListener('scroll', onScroll, {passive:true});
+  onScroll();
+})();
+</script>
+</body>
+</html>
